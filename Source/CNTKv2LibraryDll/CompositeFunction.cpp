@@ -752,6 +752,12 @@ namespace CNTK
                 case PrimitiveOpType::Sin:
                     ASSIGN_NEW_NODE(SinNode, network->GetDeviceId(), internalNodeName);
                     break;
+                case PrimitiveOpType::Atan:
+                    ASSIGN_NEW_NODE(AtanNode, network->GetDeviceId(), internalNodeName);
+                    break;
+                case PrimitiveOpType::Tan:
+                    ASSIGN_NEW_NODE(TanNode, network->GetDeviceId(), internalNodeName);
+                    break;
                 case PrimitiveOpType::Cosh:
                     ASSIGN_NEW_NODE(CoshNode, network->GetDeviceId(), internalNodeName);
                     break;
@@ -790,6 +796,9 @@ namespace CNTK
                     break;
                 case PrimitiveOpType::Hardmax:
                     ASSIGN_NEW_NODE(HardmaxNode, network->GetDeviceId(), internalNodeName);
+                    break;
+                case PrimitiveOpType::StraightThrough:
+                    ASSIGN_NEW_NODE(StraightThroughNode, network->GetDeviceId(), internalNodeName);
                     break;
                 case PrimitiveOpType::TopK:
                 {
@@ -956,6 +965,12 @@ namespace CNTK
                     computationNodePtr = New<ConstantNode<ElementType>>(network->GetDeviceId(), internalNodeName, fillValue);
                     break;
                 }
+                case PrimitiveOpType::EyeLikeOp:
+                {
+                    bool outputSparse = functionConfig[PrimitiveFunction::AttributeNameOutputSparse].Value<bool>();
+                    ASSIGN_NEW_NODE(EyeLikeNode, network->GetDeviceId(), internalNodeName, outputSparse);
+                    break;
+                }
                 case PrimitiveOpType::ROIPooling:
                 {
                     PoolingType poolingType = (PoolingType)(functionConfig[PrimitiveFunction::AttributeNamePoolingType].Value<size_t>());
@@ -1082,12 +1097,42 @@ namespace CNTK
                     NDShape outputShape = NDShape::Unknown();
                     if (functionConfig.Contains(PrimitiveFunction::AttributeNameOutputShape))
                         outputShape = functionConfig[PrimitiveFunction::AttributeNameOutputShape].Value<NDShape>();
+                    auto groups = PrimitiveFunction::convolutionOpDefaultValueForGroups;
+                    if (functionConfig.Contains(PrimitiveFunction::AttributeNameGroups))
+                        groups = functionConfig[PrimitiveFunction::AttributeNameGroups].Value<size_t>();
                     auto maxTempMemSizeInSamples = functionConfig[PrimitiveFunction::AttributeNameMaxTempMemSizeInSamples].Value<size_t>();
                     ASSIGN_NEW_NODE(ConvolutionNode, network->GetDeviceId(), internalNodeName,
-                                                                           AsTensorShape(kernelShape), AsTensorShape(outputMapCount), AsTensorShape(strides),
-                                                                           sharing, autoPadding, AsTensorShape(lowerPad), AsTensorShape(upperPad), transpose,
-                                                                           outputShape.IsUnknown() ? TensorShape(0) : AsTensorShape(outputShape),
-                                                                           ImageLayoutKind::CHW, maxTempMemSizeInSamples, AsTensorShape(dilation));
+                                    AsTensorShape(kernelShape), AsTensorShape(outputMapCount), AsTensorShape(strides),
+                                    sharing, autoPadding, AsTensorShape(lowerPad), AsTensorShape(upperPad), transpose,
+                                    outputShape.IsUnknown() ? TensorShape(0) : AsTensorShape(outputShape),
+                                    ImageLayoutKind::CHW, maxTempMemSizeInSamples, AsTensorShape(dilation), groups);
+                    break;
+                }
+                case PrimitiveOpType::ConvolutionSequenceShape:
+                {
+                    auto strides = functionConfig[PrimitiveFunction::AttributeNameStrides].Value<NDShape>();
+                    NDShape dilation = { 1 };
+                    if (functionConfig.Contains(PrimitiveFunction::AttributeNameDilation))
+                        dilation = functionConfig[PrimitiveFunction::AttributeNameDilation].Value<NDShape>();
+                    auto lowerPad = functionConfig[PrimitiveFunction::AttributeNameLowerPad].Value<NDShape>();
+                    auto upperPad = functionConfig[PrimitiveFunction::AttributeNameUpperPad].Value<NDShape>();
+                    auto sharing = AsVector<bool>(functionConfig[PrimitiveFunction::AttributeNameSharing].Value<std::vector<DictionaryValue>>());
+                    auto autoPadding = AsVector<bool>(functionConfig[PrimitiveFunction::AttributeNameAutoPadding].Value<std::vector<DictionaryValue>>());
+                    auto transpose = functionConfig[PrimitiveFunction::AttributeNameTranspose].Value<bool>();
+                    NDShape outputMapCount, kernelShape;
+                    std::tie(outputMapCount, kernelShape) = GetConvolutionOutputMapCountAndKernelShape(functionInputs[0].Shape(), functionInputs[1].Shape(), transpose);
+                    NDShape outputShape = NDShape::Unknown();
+                    if (functionConfig.Contains(PrimitiveFunction::AttributeNameOutputShape))
+                        outputShape = functionConfig[PrimitiveFunction::AttributeNameOutputShape].Value<NDShape>();
+                    auto groups = PrimitiveFunction::convolutionOpDefaultValueForGroups;
+                    if (functionConfig.Contains(PrimitiveFunction::AttributeNameGroups))
+                        groups = functionConfig[PrimitiveFunction::AttributeNameGroups].Value<size_t>();
+                    auto maxTempMemSizeInSamples = functionConfig[PrimitiveFunction::AttributeNameMaxTempMemSizeInSamples].Value<size_t>();
+                    ASSIGN_NEW_NODE(ConvolutionSequenceShapeNode, network->GetDeviceId(), internalNodeName,
+                        AsTensorShape(kernelShape), AsTensorShape(outputMapCount), AsTensorShape(strides),
+                        sharing, autoPadding, AsTensorShape(lowerPad), AsTensorShape(upperPad), transpose,
+                        outputShape.IsUnknown() ? TensorShape(0) : AsTensorShape(outputShape),
+                        ImageLayoutKind::CHW, maxTempMemSizeInSamples, AsTensorShape(dilation), groups);
                     break;
                 }
                 case PrimitiveOpType::CosDistance:
@@ -1124,6 +1169,7 @@ namespace CNTK
                     auto phonePath = functionConfig[PrimitiveFunction::AttributeNamePhonePath].Value<wstring>();
                     auto stateListPath = functionConfig[PrimitiveFunction::AttributeNameStateListPath].Value<wstring>();
                     auto transProbPath =  functionConfig[PrimitiveFunction::AttributeNameTransProbPath].Value<wstring>();
+                    auto latticeConfigPath = functionConfig[PrimitiveFunction::AttributeNameLatticeConfigPath].Value<wstring>();
                     auto frameDropThresh = functionConfig[PrimitiveFunction::AttributeNameFrameDropThresh].Value<float>();
                     auto doReferenceAlign = functionConfig[PrimitiveFunction::AttributeNameDoReferenceAlign].Value<bool>();
                     auto seqGammarUsesMBR = functionConfig[PrimitiveFunction::AttributeNameSeqGammarUsesMBR].Value<bool>();
@@ -1133,7 +1179,7 @@ namespace CNTK
                     auto seqGammarWordPen = functionConfig[PrimitiveFunction::AttributeNameSeqGammarWordPen].Value<float>();
                     auto hSmoothingWeight = functionConfig[PrimitiveFunction::AttributeNameHSmoothingWeight].Value<float>();
 
-                    computationNodePtr = New<LatticeSequenceWithSoftmaxNode<ElementType>>(network->GetDeviceId(), internalNodeName, symListPath, phonePath, stateListPath, transProbPath,
+                    computationNodePtr = New<LatticeSequenceWithSoftmaxNode<ElementType>>(network->GetDeviceId(), internalNodeName, symListPath, phonePath, stateListPath, transProbPath, latticeConfigPath,
                         hSmoothingWeight, frameDropThresh, doReferenceAlign, seqGammarUsesMBR, seqGammarAMF, seqGammarLMF, seqGammarBMMIFactor, seqGammarWordPen);
                     break;
                 }
@@ -1322,6 +1368,11 @@ namespace CNTK
                     }
                     break;
                 }
+                case PrimitiveOpType::CustomProxyOp:
+                {
+                    ASSIGN_NEW_NODE(CustomProxyOpNode, network->GetDeviceId(), internalNodeName);
+                    break;
+                }
                 default:
                     CNTK::LogicError("Specified op %S not yet supported", PrimitiveOpTypeName(op).c_str());
                     break;
@@ -1429,7 +1480,22 @@ namespace CNTK
             return GetNode(variable.BlockFunctionVariableMapping(), network, builder, fullyDefinedArgumentsMap, variableToNodeMap, isVariableRootMap, inputsToExcludeGradientsFor, useMangledNamesForComputationNodes);
         }
         else
-            computationNodePtr = CreateComputationNode<ElementType>(variable, function, inputNodes, network, variableToNodeMap, useMangledNamesForComputationNodes);
+        {
+            switch (variable.GetDataType())
+            {
+            case DataType::Float:
+                computationNodePtr = CreateComputationNode<float>(variable, function, inputNodes, network, variableToNodeMap, useMangledNamesForComputationNodes);
+                break;
+            case DataType::Double:
+                computationNodePtr = CreateComputationNode<double>(variable, function, inputNodes, network, variableToNodeMap, useMangledNamesForComputationNodes);
+                break;
+            case DataType::Float16:
+                computationNodePtr = CreateComputationNode<half>(variable, function, inputNodes, network, variableToNodeMap, useMangledNamesForComputationNodes);
+                break;
+            default:
+                RuntimeError("Unsupported variable data type for CreateComputationNode");
+            }
+        }
 
         PrimitiveFunction* primitiveFunction = dynamic_cast<PrimitiveFunction*>(function);
         if (!primitiveFunction || (primitiveFunction->OpType() != PrimitiveOpType::Combine))

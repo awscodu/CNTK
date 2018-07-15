@@ -136,6 +136,7 @@ static shared_ptr<ComputationNode<ElemType>> CreateStandardNode(const std::wstri
     else if (nodeType == OperationNameOf(TransposeTimesNode))                   return New<TransposeTimesNode<ElemType>>(forward<_Types>(_Args)...);
     else if (nodeType == OperationNameOf(QuantizedTimesNode))                   return New<QuantizedTimesNode<ElemType>>(forward<_Types>(_Args)...);
     else if (nodeType == OperationNameOf(WhereNode))                            return New<WhereNode<ElemType>>(forward<_Types>(_Args)...);
+    else if (nodeType == OperationNameOf(StraightThroughNode))                  return New<StraightThroughNode<ElemType>>(forward<_Types>(_Args)...);
     // legacy names we also support for back compat of model-files
     else if (nodeType == L"ColumnElementTimes")                                 return New<ElementTimesNode<ElemType>>(forward<_Types>(_Args)...);
     else if (nodeType == L"ErrorPrediction")                                    return New<ClassificationErrorNode<ElemType>>(forward<_Types>(_Args)...);
@@ -516,9 +517,9 @@ shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Seque
 }
 
 template <class ElemType>
-shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::LatticeSequenceWithSoftmax(const ComputationNodePtr label, const ComputationNodePtr prediction, const ComputationNodePtr loglikelihood, const ComputationNodePtr lattice, const std::wstring& symListPath, const std::wstring& phonePath, const std::wstring& stateListPath, const std::wstring& transProbPath, float hSmoothingWeight, float frameDropThresh, bool doReferenceAlign, bool seqGammarUsesMBR, float seqGammarAMF, float seqGammarLMF, float seqGammarBMMIFactor, float seqGammarWordPen, const std::wstring nodeName)
+shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::LatticeSequenceWithSoftmax(const ComputationNodePtr label, const ComputationNodePtr prediction, const ComputationNodePtr loglikelihood, const ComputationNodePtr lattice, const std::wstring& symListPath, const std::wstring& phonePath, const std::wstring& stateListPath, const std::wstring& transProbPath, const std::wstring& latticeConfigPath, float hSmoothingWeight, float frameDropThresh, bool doReferenceAlign, bool seqGammarUsesMBR, float seqGammarAMF, float seqGammarLMF, float seqGammarBMMIFactor, float seqGammarWordPen, const std::wstring nodeName)
 {
-    return net.AddNodeToNetAndAttachInputs(New<LatticeSequenceWithSoftmaxNode<ElemType>>(net.GetDeviceId(), nodeName, symListPath, phonePath, stateListPath, transProbPath, hSmoothingWeight, frameDropThresh, doReferenceAlign, seqGammarUsesMBR, seqGammarAMF, seqGammarLMF, seqGammarBMMIFactor, seqGammarWordPen), { label, prediction, loglikelihood, lattice });
+    return net.AddNodeToNetAndAttachInputs(New<LatticeSequenceWithSoftmaxNode<ElemType>>(net.GetDeviceId(), nodeName, symListPath, phonePath, stateListPath, transProbPath, latticeConfigPath, hSmoothingWeight, frameDropThresh, doReferenceAlign, seqGammarUsesMBR, seqGammarAMF, seqGammarLMF, seqGammarBMMIFactor, seqGammarWordPen), { label, prediction, loglikelihood, lattice });
 }
 
 template <class ElemType>
@@ -683,6 +684,18 @@ shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Sin(c
 }
 
 template <class ElemType>
+shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Atan(const ComputationNodePtr a, const std::wstring nodeName)
+{
+    return net.AddNodeToNetAndAttachInputs(New<AtanNode<ElemType>>(net.GetDeviceId(), nodeName), { a });
+}
+
+template <class ElemType>
+shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Tan(const ComputationNodePtr a, const std::wstring nodeName)
+{
+    return net.AddNodeToNetAndAttachInputs(New<TanNode<ElemType>>(net.GetDeviceId(), nodeName), { a });
+}
+
+template <class ElemType>
 shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Cosh(const ComputationNodePtr a, const std::wstring nodeName)
 {
     return net.AddNodeToNetAndAttachInputs(New<CoshNode<ElemType>>(net.GetDeviceId(), nodeName), { a });
@@ -716,6 +729,12 @@ template <class ElemType>
 shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::Hardmax(const ComputationNodePtr a, const std::wstring nodeName)
 {
     return net.AddNodeToNetAndAttachInputs(New<HardmaxNode<ElemType>>(net.GetDeviceId(), nodeName), { a });
+}
+
+template <class ElemType>
+shared_ptr<ComputationNode<ElemType>> ComputationNetworkBuilder<ElemType>::StraightThrough(const ComputationNodePtr a, const std::wstring nodeName)
+{
+    return net.AddNodeToNetAndAttachInputs(New<StraightThroughNode<ElemType>>(net.GetDeviceId(), nodeName), {a});
 }
 
 template <class ElemType>

@@ -10,6 +10,14 @@
 #include "ComputationNetworkBuilder.h" // TODO: We should only pull in NewComputationNodeFromConfig(). Nodes should not know about network at large.
 #include "TensorShape.h"
 
+#ifndef  CNTK_UWP
+#include "PerformanceProfiler.h"
+#ifdef _WIN32
+#define PERFORMANCE_PROFILER_LIB_NAME "Cntk.PerformanceProfiler-"##CNTK_COMPONENT_VERSION##".lib"
+#pragma comment(lib, PERFORMANCE_PROFILER_LIB_NAME)
+#endif
+#endif
+
 #ifndef let
 #define let const auto
 #endif
@@ -205,7 +213,7 @@ template<class ElemType>
         if (gapPadValue && (*gapPadValue == 0) && (unpackedData->GetMatrixType() == MatrixType::SPARSE))
             unpackedData->SetValue(*gapPadValue);
 
-        unpackedData->DoScatterColumnsOf(0, *scatterIdxMatrix, packedData, 1);
+        unpackedData->DoScatterColumnsOf(0, *scatterIdxMatrix, packedData, 1, /*idxHaveDups*/ false);
 
         // DoScatterColumnsOf fills the target with 0 before scattering if passed beta == 0. 
         // This we need to mask only if the gapPadValue != 0
@@ -770,6 +778,67 @@ template <class ElemType>
 }
 
 template <class ElemType>
+/*virtual*/ void ComputationNode<ElemType>::BeginTiming(bool backward)
+{
+    if (!Globals::ShouldEnableNodeTiming()) return;
+
+    int phase = (backward ? (int)TimingPhase_Backward : (int)TimingPhase_Forward);
+    auto& timing = m_timing[phase];
+    timing.beginTime = std::chrono::system_clock::now();
+    timing.count++;
+#ifndef  CNTK_UWP
+    timing.profilerId = ProfilerTimeBegin();
+#endif
+}
+
+template <class ElemType>
+/*virtual*/ void ComputationNode<ElemType>::EndTiming(bool backward)
+{
+    if (!Globals::ShouldEnableNodeTiming()) return;
+
+    int phase = (backward ? (int)TimingPhase_Backward : (int)TimingPhase_Forward);
+    auto& timing = m_timing[phase];
+    timing.duration += (std::chrono::system_clock::now() - timing.beginTime);
+
+#ifndef  CNTK_UWP
+    // the order must match enum
+    static const char* postfixes[TimingPhase_Total] =
+    {
+        "Forward",
+        "Backward",
+    };
+
+    if (timing.profilerName.length() != m_nodeName.length() + strlen(postfixes[phase]))
+    {
+        static char name[256];
+        sprintf_s(name, _countof(name), "%S%s", m_nodeName.c_str(), postfixes[phase]);
+        timing.profilerName = name;
+    }
+    ProfilerTimeEnd(timing.profilerId, timing.profilerName.c_str());
+#endif
+}
+
+template<class ElemType>
+void ComputationNode<ElemType>::PrintForwardBackwardTime()
+{
+    if (GetInputs().size() == 0) return;
+
+    auto& forwardCount = m_timing[TimingPhase_Forward].count;
+    auto forwardDuration = m_timing[TimingPhase_Forward].duration.count();
+    auto& backwardCount = m_timing[TimingPhase_Backward].count;
+    auto backwardDuration = m_timing[TimingPhase_Backward].duration.count();
+    fprintf(stderr, "%-30S forward avg %07fs, backward avg %07fs (fwd# %d|bwd# %d)\n",
+        m_nodeName.c_str(),
+        forwardCount == 0 ? 0 : forwardDuration / forwardCount,
+        backwardCount == 0 ? 0 : backwardDuration / backwardCount,
+        forwardCount,
+        backwardCount);
+
+    for (auto& timing : m_timing)
+        timing.Reset();
+}
+
+template <class ElemType>
 /*virtual*/ void ComputationNode<ElemType>::DumpNodeInfo(const bool /*printValues*/, const bool printMetadata, File& fstream) const
 {
     if (printMetadata)
@@ -1059,7 +1128,7 @@ void ComputationNode<ElemType>::WriteMinibatchWithFormatting(FILE* f,
     fragment = msra::strfun::ReplaceAll<string>(fragment, "\\t", "\t");
     fragment = msra::strfun::ReplaceAll<string>(fragment, "\\s", " "); // Config might strip spaces.
     if (fragment.find("%s") != fragment.npos)
-        fragment = msra::strfun::ReplaceAll<string>(fragment, "%s", msra::strfun::utf8(nodeName));
+        fragment = msra::strfun::ReplaceAll<string>(fragment, "%s", Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(nodeName)));
     if (fragment.find("%n") != fragment.npos)
         fragment = msra::strfun::ReplaceAll<string>(fragment, "%n", msra::strfun::_strprintf<char>("%ld", minibatchId).c_str());
     // %d: sequenceId
@@ -1086,12 +1155,12 @@ WriteFormattingOptions::WriteFormattingOptions(const ConfigRecordType& config) :
         transpose = formatConfig(L"transpose", transpose);
         prologue  = formatConfig(L"prologue",  prologue);
         epilogue  = formatConfig(L"epilogue",  epilogue);
-        sequenceSeparator = msra::strfun::utf8(formatConfig(L"sequenceSeparator", (wstring)msra::strfun::utf16(sequenceSeparator)));
-        sequencePrologue  = msra::strfun::utf8(formatConfig(L"sequencePrologue",  (wstring)msra::strfun::utf16(sequencePrologue)));
-        sequenceEpilogue  = msra::strfun::utf8(formatConfig(L"sequenceEpilogue",  (wstring)msra::strfun::utf16(sequenceEpilogue)));
-        elementSeparator  = msra::strfun::utf8(formatConfig(L"elementSeparator",  (wstring)msra::strfun::utf16(elementSeparator)));
-        sampleSeparator   = msra::strfun::utf8(formatConfig(L"sampleSeparator",   (wstring)msra::strfun::utf16(sampleSeparator)));
-        precisionFormat   = msra::strfun::utf8(formatConfig(L"precisionFormat",   (wstring)msra::strfun::utf16(precisionFormat)));
+        sequenceSeparator = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"sequenceSeparator", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(sequenceSeparator))));
+        sequencePrologue = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"sequencePrologue", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(sequencePrologue))));
+        sequenceEpilogue = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"sequenceEpilogue", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(sequenceEpilogue))));
+        elementSeparator = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"elementSeparator", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(elementSeparator))));
+        sampleSeparator = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"sampleSeparator", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(sampleSeparator))));
+        precisionFormat = Microsoft::MSR::CNTK::ToLegacyString(Microsoft::MSR::CNTK::ToUTF8(formatConfig(L"precisionFormat", Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(precisionFormat))));
         // TODO: change those strings into wstrings to avoid this conversion mess
     }
 }

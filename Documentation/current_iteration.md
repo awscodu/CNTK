@@ -1,21 +1,39 @@
-# CNTK v2.4 Release Notes
+# CNTK Current Iteration
 
-## Highlights of this Release
-- Move to CUDA9, cuDNN 7 and Visual Studio 2017.
-- Removed Python 3.4 support.
-- Support Volta GPU and FP16.
-- Better ONNX support.
-- CPU perf improvement.
-- More OPs.
+## Efficient group convolution
+The implementation of group convolution in CNTK has been updated. The updated implementation moves away from creating a sub-graph for group convolution (using slicing and splicing), and instead uses cuDNN7 and MKL2017 APIs directly. This improves the experience both in terms of performance and model size. 
 
-## OPs
-- ``top_k`` operation: in the forward pass it computes the top (largest) k values and corresponding indices along the specified axis. In the backward pass the gradient is scattered to the top k elements (an element not in the top k gets a zero gradient).
-- ``gather`` operation now supports an axis argument
-- ``squeeze`` and ``expand_dims`` operations for easily removing and adding singleton axes
-- ``zeros_like`` and ``ones_like`` operations. In many situations you can just rely on CNTK correctly broadcasting a simple 0 or 1 but sometimes you need the actual tensor.
+As an example, for a single group convolution op with the following attributes:
+
+- Input tensor (C, H, W) = (32, 128, 128)
+- Number of output channels = 32 (channel multiplier is 1)
+- Groups = 32 (depth wise convolution)
+- Kernel size = (5, 5)
+
+The comparison numbers for this single node are as follows:
+
+| First Header  | GPU exec. time (in millisec., 1000 run avg.) | CPU exec. time (in millisec., 1000 run avg.) | Model Size (in KB, CNTK format)
+| ------------- | ------------- | ------------- | ------------- |
+| Old implementation  | 9.349  | 41.921  | 38  |
+| New implementation  | 6.581  | 9.963  | 5  |
+| Speedup/savings	Approx.  | 30%	Approx.  | 65-75%	Approx.  | 87% |
+
+## Operators
+### depth_to_space and space_to_depth
+There is a breaking change in the **depth_to_space** and **space_to_depth** operators. These have been updated to match ONNX specification, specifically
+the permutation for how the depth dimension is placed as blocks in the spatial dimensions, and vice-versa, has been changed. Please refer to the updated doc
+examples for these two ops to see the change.
+
+
+## Bug fixes
+
 
 ## ONNX
-- Improved ONNX support in CNTK.
-- Update ONNX to the latest ONNX from https://github.com/onnx/onnx
-- Fixed several bugs.
+### Updates
+- Updated CNTK's ONNX BatchNormalization op export/import to latest spec.
+
+### Bug or minor fixes:
+
+
+## Misc
 

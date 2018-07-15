@@ -50,13 +50,17 @@ protected:
 
     const LatticeDeserializer& m_deserializer;
     const ChunkDescriptor& m_descriptor;     // Current chunk descriptor.
-
-    ChunkBase(const LatticeDeserializer& deserializer, const ChunkDescriptor& descriptor, const wstring& fileName):
+    int m_verbosity;
+    ChunkBase(const LatticeDeserializer& deserializer, const ChunkDescriptor& descriptor, const wstring& fileName, int verbosity):
         m_descriptor(descriptor),
-        m_deserializer(deserializer)
+        m_deserializer(deserializer),
+        m_verbosity(verbosity)
     {
         if (descriptor.NumberOfSequences() == 0 || descriptor.SizeInBytes() == 0)
             LogicError("Empty chunks are not supported.");
+
+        if (m_verbosity == 1)
+            fprintf(stderr, "Reading lattice from file '%ls'\n", fileName.c_str());
 
         auto f = FileWrapper::OpenOrDie(fileName, L"rbS");
         size_t sizeInBytes = descriptor.SizeInBytes();
@@ -92,8 +96,8 @@ class LatticeDeserializer::SequenceChunk : public LatticeDeserializer::ChunkBase
 {
 
 public:
-    SequenceChunk(const LatticeDeserializer& parent, const ChunkDescriptor& descriptor, const wstring& fileName)
-        : ChunkBase(parent, descriptor, fileName), m_ndShape({ 1 })
+    SequenceChunk(const LatticeDeserializer& parent, const ChunkDescriptor& descriptor, const wstring& fileName, int verbosity)
+        : ChunkBase(parent, descriptor, fileName, verbosity), m_ndShape({ 1 })
     {
     }
 
@@ -107,6 +111,9 @@ public:
     {
         const auto& sequence = m_descriptor.Sequences()[sequenceIndex];
         
+        if (m_verbosity == 1)
+            fprintf(stderr, "Reading sequence '%s'...\n", KeyOf(sequence).c_str());
+
         // Deserialize the binary lattice graph and serialize it into a vector
         SequenceDataPtr s = make_shared<LatticeFloatSequenceData>(m_pBuffer->data() + sequence.OffsetInChunk(), sequence.NumberOfSamples(), m_ndShape, m_pBuffer);
 
@@ -287,7 +294,7 @@ ChunkPtr LatticeDeserializer::GetChunk(ChunkIdType chunkId)
         auto chunk = m_chunks[chunkId];
         auto& fileName = m_latticeFiles[m_chunkToFileIndex[chunk]];
 
-        result = make_shared<SequenceChunk>(*this, *chunk, fileName);
+        result = make_shared<SequenceChunk>(*this, *chunk, fileName, m_verbosity);
     });
 
     return result;

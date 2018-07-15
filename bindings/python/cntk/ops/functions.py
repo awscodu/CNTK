@@ -142,7 +142,7 @@ class Function(cntk_py.Function):
     _placeholders_under_construction = set()
 
     @staticmethod
-    def _to_Function(f, make_block=False, op_name=None, name=None):
+    def _to_Function_unchecked(f, make_block=False, op_name=None, name=None):
         '''implements @Function decorator; see :class:`~cntk.layers.functions.Function`'''
         f_name = f.__name__ # (only used for debugging and error messages)
 
@@ -242,21 +242,42 @@ class Function(cntk_py.Function):
                     fun_args = force_order_args(fun_args)
                     out = invoke(fun_args)
 
-            # verify that we got the parameter order right
-            out_arg_names = [arg.name for arg in out.signature]
-            assert out_arg_names == arg_names, (out_arg_names, arg_names)
+            return out, args
 
-            if len(out.signature) != len(args):
-                unfulfilled_args = set(out.signature) - set(args)
-                if unfulfilled_args:
-                    unfulfilled_arg_names = [arg.name for arg in unfulfilled_args]
-                    raise TypeError("CNTK Function '{}' has {} missing arguments ({}), which is currently not supported".format(f_name, len(unfulfilled_arg_names), ", ".join(unfulfilled_arg_names)))
-                else:
-                    unused_args = set(args) - set(out.signature)
-                    unused_arg_names = [arg.name for arg in unused_args]
-                    raise TypeError("CNTK Function '{}' has {} unused arguments ({}), which is currently not supported".format(f_name, len(unused_arg_names), ", ".join(unused_arg_names)))
+    @staticmethod
+    def _sanitize_check_Function(f_out, f_args, f):
+        arg_names, annotations = get_python_function_arguments(f)
+        #verify the argument length first
+        if len(f_out.signature) != len(f_args):
+            f_name = f.__name__
+            unfulfilled_args = set(f_out.signature) - set(f_args)
+            if unfulfilled_args:
+                unfulfilled_arg_names = [arg.name for arg in unfulfilled_args]
+                raise TypeError(
+                    "CNTK Function '{}' has {} missing arguments ({}), which is currently not supported".format(f_name,
+                                                                                                                len(
+                                                                                                                    unfulfilled_arg_names),
+                                                                                                                ", ".join(
+                                                                                                                    unfulfilled_arg_names)))
+            else:
+                unused_args = set(f_args) - set(f_out.signature)
+                unused_arg_names = [arg.name for arg in unused_args]
+                raise TypeError(
+                    "CNTK Function '{}' has {} unused arguments ({}), which is currently not supported".format(f_name,
+                                                                                                               len(
+                                                                                                                   unused_arg_names),
+                                                                                                               ", ".join(
+                                                                                                                   unused_arg_names)))
 
-            return out
+        #then verify that we got the parameter order right
+        out_arg_names = [arg.name for arg in f_out.signature]
+        assert out_arg_names == arg_names, (out_arg_names, arg_names)
+        return f_out
+
+    @staticmethod
+    def _to_Function(f, make_block=False, op_name=None, name=None):
+        out, args = Function._to_Function_unchecked(f, make_block, op_name, name)
+        return Function._sanitize_check_Function(out, args, f)
 
     @property
     def signature(self):
@@ -615,6 +636,9 @@ class Function(cntk_py.Function):
         substitutions = substitutions or {}
         if not isinstance(substitutions, dict):
             raise TypeError("Variable substitution map must be a dictionary")
+        for prev_node, new_node in substitutions.items():
+            if not new_node or not prev_node:
+                raise AttributeError("Cannot replace node: " + str(prev_node) + " with node: " + str(new_node) + ". Neither node can be None.")
         return super(Function, self).clone(method, substitutions)
 
     @property
@@ -1089,6 +1113,13 @@ class Function(cntk_py.Function):
         The internally generated unique name of the function.
         '''
         return super(Function, self).uid()
+
+    def print_node_timing(self):
+        '''
+        Prints per-node average timing per-minibatch for each primitive function.
+        statistics would reset after print
+        '''
+        return super(Function, self).print_node_timing()
 
 
 

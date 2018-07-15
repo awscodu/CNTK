@@ -117,6 +117,12 @@ namespace CNTK
         {PrimitiveOpType::ConstantOp, L"ConstantOp"},
         {PrimitiveOpType::Squeeze, L"Squeeze"},
         {PrimitiveOpType::Cast, L"Cast" },
+        { PrimitiveOpType::EyeLikeOp, L"EyeLikeOp" },
+        { PrimitiveOpType::CustomProxyOp, L"CustomProxyOp" },
+        {PrimitiveOpType::StraightThrough, L"StraightThrough"},
+        { PrimitiveOpType::Tan, L"Tan" },
+        { PrimitiveOpType::Atan, L"Atan" },
+        { PrimitiveOpType::ConvolutionSequenceShape, L"ConvolutionSequenceShape" },
     };
 
     inline const std::wstring& PrimitiveOpTypeName(PrimitiveOpType opType)
@@ -234,6 +240,7 @@ namespace CNTK
         static const std::wstring AttributeNameDilation;
         static const std::wstring AttributeNameSharing;
         static const std::wstring AttributeNameAutoPadding;
+        static const std::wstring AttributeNameSequential;
         static const std::wstring AttributeNameLowerPad;
         static const std::wstring AttributeNameUpperPad;
         static const std::wstring AttributeNameCeilOutDim;
@@ -278,6 +285,7 @@ namespace CNTK
         static const std::wstring AttributeNameSymListPath;
         static const std::wstring AttributeNameStateListPath;
         static const std::wstring AttributeNameTransProbPath;
+        static const std::wstring AttributeNameLatticeConfigPath;
         static const std::wstring AttributeNameHSmoothingWeight;
         static const std::wstring AttributeNameFrameDropThresh;
         static const std::wstring AttributeNameDoReferenceAlign;
@@ -288,6 +296,7 @@ namespace CNTK
         static const std::wstring AttributeNameSeqGammarWordPen;
         static const std::wstring AttributeNameNumClass;
         static const std::wstring AttributeNameOneHotOutputSparse;
+        static const std::wstring AttributeNameOutputSparse;
         static const std::wstring AttributeNameOneHotAxis;
         static const std::wstring AttributeNameSequenceAxisNamePrefix;
         static const std::wstring AttributeNameSequenceUnpackPaddingValue;
@@ -311,6 +320,12 @@ namespace CNTK
         static const std::wstring AttributeNameCustomAttributes;
         static const std::wstring AttributeNameNumItems;
         static const std::wstring AttributeNameFillValue;
+        static const std::wstring AttributeNameUseStatsAcrossChannels;
+        static const std::wstring AttributeNameDoVarianceScaling;
+        static const std::wstring AttributeNameGroups;
+        static const std::wstring AttributeNameCustomOp;
+
+        static const size_t convolutionOpDefaultValueForGroups = 1;
 
     protected:
         PrimitiveFunction(PrimitiveOpType op, const std::vector<Variable>& inputs, Dictionary&& functionConfig, const std::wstring& functionName, const std::wstring& uid)
@@ -499,15 +514,16 @@ namespace CNTK
         static bool UpdateOperandShapes(std::vector<std::pair<Variable, NDShape>>& newOperandShapes);
 
         // Returns a pair comprising of the output shape and boolean indicating if any input operand shape was modified
-        static NDShape BinaryElementwiseOpOutputShape(PrimitiveOpType op, Variable& leftOperand, Variable& rightOperand, bool inferInputDimensions)
+        static NDShape BinaryElementwiseOpOutputShape(PrimitiveOpType op, Variable& leftOperand, Variable& rightOperand, bool inferInputDimensions, bool allowScalarBroadcast = true)
         {
             auto leftOperandShape = leftOperand.Shape();
             auto rightOperandShape = rightOperand.Shape();
 
-            if (leftOperandShape.IsUnknown())
+            // when scalar allows broadcasting, keep unknown shape
+            if (leftOperandShape.IsUnknown() && !(allowScalarBroadcast && rightOperandShape.IsScalar()))
                 leftOperandShape = rightOperandShape;
 
-            if (rightOperandShape.IsUnknown())
+            if (rightOperandShape.IsUnknown() && !(allowScalarBroadcast && leftOperandShape.IsScalar()))
                 rightOperandShape = leftOperandShape;
 
             // All operand shapes should be known
@@ -743,7 +759,7 @@ namespace CNTK
 
         static NDShape ConvolutionOpOutputShape(PrimitiveOpType op, const NDShape& operandShape, NDShape& kernelShape, NDShape& outputMapCount, NDShape& strides,
                                                 std::vector<bool>& sharing, std::vector<bool>& autoPad, NDShape& lowerPad, NDShape& upperPad,
-                                                bool transpose, bool inferDimensions, NDShape& dilation, bool ceilOutputDim = false);
+                                                bool transpose, bool inferDimensions, NDShape& dilation, size_t groups=1, bool ceilOutputDim = false);
 
         static NDShape BatchNormalizationOutputShape(std::vector<Variable>& operands, bool spatial, bool inferDimensions)
         {
@@ -758,7 +774,7 @@ namespace CNTK
 
                 if (i < operands.size() - 1)
                 {
-                    if (inferDimensions && ((paramShape.Rank() == 1) && paramShape.HasInferredDimension()) && !mainOperandShape.HasUnboundDimension())
+                    if (inferDimensions && ((paramShape.Rank() == 1) && paramShape.HasInferredDimension()) && (!mainOperandShape.HasUnboundDimension() || (spatial && mainOperandShape[mainOperandShape.Rank() - 1] != NDShape::FreeDimension)))
                     {
                         size_t total = spatial ? mainOperandShape[mainOperandShape.Rank() - 1] : mainOperandShape.TotalSize();
                         paramShape[0] = total;
@@ -826,7 +842,11 @@ namespace CNTK
         // Version 18: Add Crop node.
         // Version 19: Add TopK
         // Version 20: Add squeeze, expand dims, zeros like, ones like
-        static const size_t s_serializationVersion = 20;
+        // Version 21: Add EyeLikeOp
+        // Version 22: Add StraightThrough
+        // Version 23: Add Tan and Atan.
+        // Version 24: Add ConvolutionSequenceShape.
+        static const size_t s_serializationVersion = 24;
     };
 
     std::vector<DictionaryValue> GetInputUids(const Function& f);

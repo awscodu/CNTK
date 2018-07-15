@@ -86,7 +86,7 @@ public:
     };
     header_v1_v2 info; // information about the lattice
 private:
-    mutable int verbosity;
+    mutable int verbosity = 0;
     static const unsigned int NOEDGE = 0xffffff; // 24 bits
     // static_assert (sizeof (nodeinfo) == 8, "unexpected size of nodeeinfo"); // note: int64_t required to allow going across 32-bit boundary
     // ensure type size as these are expected to be of this size in the files we read
@@ -1332,14 +1332,14 @@ public:
             const char* p = strchr(line, '=');
             if (p == NULL)
                 RuntimeError("open: invalid TOC line (no = sign): %s", line);
-            const std::wstring key = msra::strfun::utf16(std::string(line, p - line));
+            const std::wstring key = Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(std::string(line, p - line));
             p++;
             const char* q = strchr(p, '[');
             if (q == NULL)
                 RuntimeError("open: invalid TOC line (no [): %s", line);
             if (q != p)
             {
-                std::wstring archivepath = msra::strfun::utf16(std::string(p, q - p));
+                std::wstring archivepath = Microsoft::MSR::CNTK::ToFixedWStringFromMultiByte(std::string(p, q - p));
                 if (!prefixPathInToc.empty())
                 {
                     archivepath = prefixPathInToc + L"/" + archivepath;
@@ -1429,11 +1429,12 @@ public:
         {
             currentarchiveindex = SIZE_MAX;
             f = NULL; // this closes the file handle
+            fprintf(stderr, "Exception when reading lattice for %ls\n", key.c_str());
             throw;
         }
         // check if number of frames is as expected
         if (expectedframes != SIZE_MAX && L.getnumframes() != expectedframes)
-            LogicError("getlattice: number of frames mismatch between numerator lattice and features");
+            LogicError("getlattice: number of frames mismatch between numerator lattice and features for utterance %ls", key.c_str());
         // remember the latice key for diagnostics messages
         L.key = key;
     };

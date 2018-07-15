@@ -358,10 +358,9 @@ namespace CNTK
             mainStreamSyncEvent->SynchronizeDataTransferFetchStreamWithEvent<float>();
         }
 
-        // BUGBUG: assuming the all values on the same device
         if (m_nccl == nullptr)
         {
-            m_nccl.reset(new NcclComm(AsCNTKImplDeviceId(inputValues[0]->Device()), m_mpi));
+            m_nccl.reset(new NcclComm(DeviceDescriptor::UseDefaultDevice().Id(), m_mpi));
         }
 
         // For all values residing on GPU initiate async transfer to CPU buffers if needed
@@ -458,8 +457,8 @@ namespace CNTK
     {
         if (m_mpi->NumNodesInUse() == 1) // No need to aggregate anything.
             return;
-#ifdef CPUONLY
-        LogicError("Sparse block column aggregation on CPUDevice not implemented");
+#if defined(CPUONLY) || HAS_MPI == 0
+        LogicError("Sparse block column aggregation on CPUDevice or non-MPI not implemented");
 #else
         // a handy struct to access sparse block column matrix internal data
         struct SBCInfo

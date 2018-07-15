@@ -314,7 +314,15 @@ public:
 
     virtual ParentGradientOptimization ImplementsGradientOptimization(const ComputationNodeBase*) const override
     {
-        return ParentGradientOptimization::Overwrite;
+        switch (m_reductionOp)
+        {
+        case ElementWiseOperator::opArgmin:
+        case ElementWiseOperator::opArgmax:
+            //no optimization will happen; the child should not use the parent's gradients as no gradients will be passed
+            return ParentGradientOptimization::None;
+        default:
+            return ParentGradientOptimization::Overwrite;
+        }
     }
 
     void RequestMatricesBeforeForwardProp(MatrixPool& matrixPool) override
@@ -2085,6 +2093,7 @@ public:
         if (inputIndex == 1) //only right operand need calculate gradient
         {
             let&  indices = InputRef(0).Value();
+            const auto& indicesMask = InputRef(0).GetMBLayout()->GetColumnsValidityMask(indices.GetDeviceId());
             auto& sourceGradient = InputRef(1).Gradient();
             auto& outputGradient = Gradient();
             const auto& sampleLayout = InputRef(1).GetSampleLayout();
@@ -2101,11 +2110,11 @@ public:
                 row_elements *= dims[i];
             }
 
-            sourceGradient.ScatterToIndices(outputGradient, indices, row_elements);
+            sourceGradient.ScatterToIndices(outputGradient, indices, row_elements, &indicesMask);
         }
         else
         {
-            LogicError("%ls operation doesn't expect gradient on left operand", OperationName().c_str());
+            //No graidents pass through indices (the left operand), so do nothing
         }
     }
 

@@ -62,7 +62,6 @@ Build info:
 		Last modified date: Mon Sep 25 09:55:50 2017
 		Build type: Release
 		Build target: GPU
-		With 1bit-SGD: yes
 		With ASGD: yes
 		Math lib: mkl
 		CUDA version: 8.0.0
@@ -351,6 +350,31 @@ Test module "V2LibraryTests" has passed with:
     Test case "BlockSuite/BlocksWithRecurrence" has passed
 
     Test case "BlockSuite/ChangingParameterValuesInGPU" has passed
+
+  Test suite "ConvolutionFunctionSuite" has passed with:
+     10 test cases out of 10 passed
+     15 assertions out of 15 passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkDifferentRankInCPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetwork1DFreeDimensionInCPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetwork1DSequentialInCPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkSequentialValueTestInCPU" has passed with:
+       15 assertions out of 15 passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkDifferentRankInGPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetwork1DFreeDimensionInGPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetwork1DSequentialInGPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkDilationInGPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkDilationSequentialInGPU" has passed
+ 
+     Test case "ConvolutionFunctionSuite/ConvolutionNetworkSequentialValueTestInGPU" has passed
 
   Test suite "LearnerSuite" has passed with:
     13 test cases out of 13 passed

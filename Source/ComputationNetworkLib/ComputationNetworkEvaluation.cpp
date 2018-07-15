@@ -11,6 +11,7 @@
 #include "RecurrentNodes.h"
 #include "InputAndParamNodes.h"
 #include "LinearAlgebraNodes.h"
+#include "SpecialPurposeNodes.h"
 #include <string>
 #include <vector>
 #include <list>
@@ -145,7 +146,9 @@ ComputationNetwork::PARTraversalFlowControlNode::PARTraversalFlowControlNode(con
     if (node->IsOutOfDateWrtInputs())
     {
         node->BeginForwardProp();
+        node->BeginTiming(false /*backward*/);
         node->ForwardProp(fr.WithLayout(node->GetMBLayout()));
+        node->EndTiming(false /*backward*/);
         node->EndForwardProp();
 
         node->BumpEvalTimeStamp();
@@ -183,7 +186,9 @@ ComputationNetwork::PARTraversalFlowControlNode::PARTraversalFlowControlNode(con
         auto& node = *pnode;
 
         node->BeginBackprop();
+        node->BeginTiming(true /*backward*/);
         node->Backprop(fr.WithLayout(node->GetMBLayout()), true /*childrenInThisLoop*/, true /*childrenInOuterLoop*/);
+        node->EndTiming(true /*backward*/);
         node->EndBackprop();
 
         // Extreme Tracing, part 2/4
@@ -280,7 +285,9 @@ static bool DumpNode(ComputationNodeBasePtr nodep, bool dumpGradient)
     {
         for (auto& node : m_nestedNodes)
         {
+            node->BeginTiming(false /*backward*/);
             node->ForwardProp(t);
+            node->EndTiming(false /*backward*/);
             node->BumpEvalTimeStamp();
         }
     }
@@ -320,7 +327,9 @@ static bool DumpNode(ComputationNodeBasePtr nodep, bool dumpGradient)
         for (auto nodeIter2 = recurrentNodes.rbegin(); nodeIter2 != recurrentNodes.rend(); ++nodeIter2)
         {
             auto& node2 = *nodeIter2;
+            node2->BeginTiming(true /*backward*/);
             node2->Backprop(t, true /*childrenInThisLoop*/, false /*childrenInOuterLoop*/);
+            node2->EndTiming(true /*backward*/);
             // The above flags tell Backprop() to skip back-propagation from inside a node into
             // a node that is outside the loop, which is done later in EndBackprop() in PAR mode.
         }
@@ -759,9 +768,12 @@ bool ComputationNetwork::ValidateNode(ComputationNodeBasePtr node, bool isFinalV
     auto nodeNeedsDynamicValidation = node->NeedsDynamicValidation();
     node->m_needsDynamicValidation |= node->ForceDynamicValidation();
     auto needsGradient = node->m_needsGradient;
+
     for (auto& child : children) // TODO: do we need a check that this is stable if isFinalValidationPass?
     {
-        node->m_needsGradient |= child->m_needsGradient;
+        // check if this is StopGradientNode. For this node it is ok to not backprop gradient.
+        if (node->OperationName() != OperationNameOf(StopGradientNode))
+            node->m_needsGradient |= child->m_needsGradient;
         node->m_needsDynamicValidation |= child->m_needsDynamicValidation;
     }
 
